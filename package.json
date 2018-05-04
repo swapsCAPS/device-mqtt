@@ -4,6 +4,7 @@
   "main": "build/index.js",
   "scripts": {
     "build": "coffee --output build --compile src",
+    "watch": "coffee --output build --watch --compile src",
     "test": "coffeetape test/*.test.coffee | tap-summary",
     "test-dev": "NODE_ENV=development coffeetape test/*.test.coffee | tap-summary",
     "test-debug": "NODE_ENV=development nodemon test/*.test.coffee --exec coffeetape test/*.test.coffee | tap-spec"

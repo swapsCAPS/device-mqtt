@@ -1,10 +1,10 @@
 randomstring = require 'randomstring'
 debug        = (require 'debug') "device-mqtt:api_commands"
 
-QOS               = 2
+QOS               = 0
 MAIN_TOPIC        = 'commands'
 RESPONSE_SUBTOPIC = 'response'
-ACTIONID_POSITION = 2
+ACTIONID_POSITION = 0
 RESPONSE_REGEXP   = new RegExp "^#{MAIN_TOPIC}\/(.)+\/([a-zA-Z0-9])+\/#{RESPONSE_SUBTOPIC}"
 ACTION_REGEXP     = new RegExp "^#{MAIN_TOPIC}\/(.)+\/([a-zA-Z0-9])+"
 
@@ -15,6 +15,16 @@ module.exports = ({ mqttInstance, socket, socketId }) ->
 	_socket = socket
 	_mqtt   = mqttInstance
 	_actionResultCallbacks = {}
+
+	sendHTTP = (clientId, req, res) ->
+		console.log req
+
+		# Get ip
+		_mqtt.sub "#{clientId}/ip", { qos: 0 }, (error, granted) ->
+			console.log "granted", granted
+			console.log "error", error
+		{ action, dest, payload } = message
+		res()
 
 	send = (message, resultCb, mqttCb) ->
 		{ action, dest, payload } = message
@@ -134,6 +144,7 @@ module.exports = ({ mqttInstance, socket, socketId }) ->
 
 	return {
 		send
+		sendHTTP
 		handleMessage
 		responseRegex: RESPONSE_REGEXP
 		actionRegex: ACTION_REGEXP

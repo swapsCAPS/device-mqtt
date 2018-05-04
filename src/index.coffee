@@ -6,15 +6,28 @@
 
 EventEmitter2 = require('eventemitter2').EventEmitter2
 mqtt          = require 'mqtt'
+http          = require "http"
 MqttDecorator = require './MqttDecorator'
 fs            = require 'fs'
+os           = require 'os'
 debug         = require('debug') "device-mqtt:main"
 
 currentClientId   = 0
 currentSocketId   = 0
 MAIN_TOPIC        = 'commands'
 COLLECTIONS_TOPIC = 'collections'
-QOS               = 2
+QOS               = 0
+
+getIps = ->
+	ifaces = os.networkInterfaces()
+
+	eth0IP  = ifaces.eth0?[0].address  or null
+	tun0IP  = ifaces.tun0?[0].address  or null
+	wwan0IP = ifaces.wwan0?[0].address or null
+	ppp0IP  = ifaces.ppp0?[0].address  or null
+
+	{ eth0IP, tun0IP, ppp0IP, wwan0IP }
+
 
 module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 	ACTIONS_TOPIC               = "#{MAIN_TOPIC}/#{clientId}/+"
@@ -61,7 +74,8 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		_mqtt = MqttDecorator _mqtt
 
 		_init _mqtt
-		_initApis _mqtt
+		_initApis _mqtt, clientId
+		_initHTTP console.log
 
 	destroy = (cb) ->
 		debug "[MQTT client] Ending"
@@ -98,34 +112,14 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 	_subFirstTime = (cb) ->
 		_startListeningToMessages()
 		topics = [
-			ACTIONS_TOPIC,
-			SINGLE_ITEM_DB_TOPIC,
-			OBJECT_DB_TOPIC,
-			GLOBAL_OBJECT_DB_TOPIC,
+			ACTIONS_TOPIC
+			SINGLE_ITEM_DB_TOPIC
+			OBJECT_DB_TOPIC
+			GLOBAL_OBJECT_DB_TOPIC
 			SINGLE_ITEM_GLOBAL_DB_TOPIC
 		]
 
 		debug "Subscribing to topics for first time: #{topics}"
-
-		_mqtt.sub(topics,
-			{ qos: QOS },
-			(error, granted) ->
-				if error
-					errorMsg = "Error subscribing to actions topic. Reason: #{error.message}"
-					return cb new Error errorMsg
-				debug "Subscribed correctly to topics #{topics}"
-				cb()
-		)
-
-	_subToDbTopics = (cb) ->
-		topics = [
-				SINGLE_ITEM_DB_TOPIC,
-				OBJECT_DB_TOPIC,
-				GLOBAL_OBJECT_DB_TOPIC,
-				SINGLE_ITEM_GLOBAL_DB_TOPIC
-			]
-
-		debug "Subscribing to db topics: #{topics}"
 
 		_mqtt.sub(topics,
 			{ qos: QOS },
@@ -166,36 +160,19 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 
 	_createSocket = ->
 		debug "Create socket", _socket.id
-		{ send } = api_commands
+		{ send, sendHTTP } = api_commands
 		{ createCollection, createGlobalCollection } = api_db
 
-		_socket.send = send
-		_socket.createCollection = createCollection
+		_socket.send                   = send
+		_socket.createCollection       = createCollection
 		_socket.createGlobalCollection = createGlobalCollection
-		_socket.customPublish = customPublish
-		_socket.customSubscribe = customSubscribe
+		_socket.customPublish          = customPublish
+		_socket.customSubscribe        = customSubscribe
 		_socket
 
 	_init = (mqttInstance) ->
 		_onConnection = (connack) ->
 			_client.connected = true
-
-			###
-				The connack.sessionPresent is set to `true` if
-				the client has already a persistent session.
-				If the session is there, there is no need to
-				sub again to the topics.
-			###
-			# if connack.sessionPresent
-			# 	###
-			# 		Subscribing to the db topics is needed because
-			# 		even if there is a persistent session, the
-			# 		retained messages are not received.
-			# 	###
-			# 	return _subToDbTopics (error) ->
-			# 		return _client.emit 'error', error if error
-			# 		_client.emit 'connected', _createSocket()
-			# 		_startListeningToMessages()
 
 			_subFirstTime (error) ->
 				_client.emit 'error', error if error
@@ -221,6 +198,22 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		mqttInstance.on 'connect',   _onConnection
 		mqttInstance.on 'reconnect', _onReconnect
 		mqttInstance.on 'close',     _onClose
+
+	_initHTTP = (cb) ->
+		server = http.createServer (req, res) ->
+			res.writeHead 200, "Content-Type": "application/json"
+			res.end JSON.stringify yeah: "boi"
+
+		server.listen ->
+			port = server.address().port
+			console.log "port", port
+			_mqtt.pub "#{clientId}/ip", JSON.stringify({ ips: getIps(), port }),
+				retain: true
+				qos:    0
+			, (error) ->
+				console.log "error", error
+
+
 
 	_createClient = ->
 		_client.connect = connect

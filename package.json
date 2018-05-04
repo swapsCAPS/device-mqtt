@@ -25,6 +25,7 @@
     "is-json": "^2.0.1",
     "mqtt": "^2.17.0",
     "randomstring": "^1.1.5",
+    "request": "^2.85.0",
     "tape": "^4.8.0",
     "underscore": "^1.8.3"
   },

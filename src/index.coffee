@@ -164,6 +164,7 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		{ createCollection, createGlobalCollection } = api_db
 
 		_socket.send                   = send
+		_socket.sendHTTP               = sendHTTP
 		_socket.createCollection       = createCollection
 		_socket.createGlobalCollection = createGlobalCollection
 		_socket.customPublish          = customPublish
@@ -203,6 +204,7 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		server = http.createServer (req, res) ->
 			res.writeHead 200, "Content-Type": "application/json"
 			res.end JSON.stringify yeah: "boi"
+			_messageHandler req.topic, req.message
 
 		server.listen ->
 			port = server.address().port

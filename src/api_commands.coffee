@@ -1,4 +1,5 @@
 randomstring = require 'randomstring'
+request      = require "request"
 debug        = (require 'debug') "device-mqtt:api_commands"
 
 QOS               = 0
@@ -16,15 +17,29 @@ module.exports = ({ mqttInstance, socket, socketId }) ->
 	_mqtt   = mqttInstance
 	_actionResultCallbacks = {}
 
-	sendHTTP = (clientId, req, res) ->
-		console.log req
+	sendHTTP = (message, res) ->
+		{ action, dest, payload } = message
+		console.log "action", action
+		console.log "dest", dest
 
 		# Get ip
-		_mqtt.sub "#{clientId}/ip", { qos: 0 }, (error, granted) ->
+		_mqtt.on "message", (topic, ipInfo) ->
+			return unless topic is "#{dest}/ip"
+			_mqtt.unsubscribe "#{dest}/ip", (error) ->
+				console.log "unsubscribe", error
+			console.log "ipInfo", ipInfo.toString()
+			{ips, port} = JSON.parse ipInfo.toString()
+
+			# Make request to device
+			request.post "http://#{ips.tun0IP}:#{port}", (error, response, body) ->
+				console.log "error", error
+				console.log "response", response
+				console.log "body", body
+
+
+		_mqtt.subscribe "#{dest}/ip", { qos: 0 }, (error, granted) ->
 			console.log "granted", granted
 			console.log "error", error
-		{ action, dest, payload } = message
-		res()
 
 	send = (message, resultCb, mqttCb) ->
 		{ action, dest, payload } = message

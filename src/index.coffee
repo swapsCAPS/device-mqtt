@@ -8,6 +8,7 @@ EventEmitter2 = require('eventemitter2').EventEmitter2
 mqtt          = require 'mqtt'
 http          = require "http"
 MqttDecorator = require './MqttDecorator'
+hapi          = require "hapi"
 fs            = require 'fs'
 os           = require 'os'
 debug         = require('debug') "device-mqtt:main"
@@ -73,9 +74,10 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		_mqtt = mqtt.connect _mqttUrl, connectionOptions
 		_mqtt = MqttDecorator _mqtt
 
+		_initHTTP (error) ->
+			throw error if error
 		_init _mqtt
 		_initApis _mqtt, clientId
-		_initHTTP console.log
 
 	destroy = (cb) ->
 		debug "[MQTT client] Ending"
@@ -139,7 +141,7 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		{ responseRegex, actionRegex } = api_commands
 		{ dbRegex, globalRegex } = api_db
 
-		topic = topic.toString()
+		topic   = topic.toString()
 		message = message.toString()
 
 		if responseRegex.test topic
@@ -171,7 +173,7 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		_socket.customSubscribe        = customSubscribe
 		_socket
 
-	_init = (mqttInstance) ->
+	_init = (mqttInstance, cb) ->
 		_onConnection = (connack) ->
 			_client.connected = true
 
@@ -201,21 +203,35 @@ module.exports = ({ host, port, clientId, tls = {}, extraOpts = {} }) ->
 		mqttInstance.on 'close',     _onClose
 
 	_initHTTP = (cb) ->
-		server = http.createServer (req, res) ->
-			res.writeHead 200, "Content-Type": "application/json"
-			res.end JSON.stringify yeah: "boi"
-			_messageHandler req.topic, req.message
+		console.log "init HTTP!"
+		server = new hapi.Server()
 
-		server.listen ->
-			port = server.address().port
-			console.log "port", port
-			_mqtt.pub "#{clientId}/ip", JSON.stringify({ ips: getIps(), port }),
-				retain: true
-				qos:    0
-			, (error) ->
-				console.log "error", error
+		server.route
+			method: "POST"
+			path: '/'
+			handler: (req, res) ->
+				body = req.payload
+				# TODO guards, statuscodes
+				console.log "body", body
+
+				_socket.emit "action", body.action, body.payload
+				_socket.emit "action:#{body.action}", body.payload
 
 
+		server
+			.start()
+			.then ->
+				topic   = "#{clientId}/ip"
+				message = JSON.stringify({ ips: getIps(), port: server.info.port })
+
+				_mqtt.pub topic, message, { retain: true, qos: 0 }, (error) ->
+					throw error if error
+					console.log "HTTP server for #{clientId} listening on", server.info.port
+					debug "HTTP server for #{clientId} listening on", server.info.port
+					cb()
+
+			.catch (error) ->
+				cb error
 
 	_createClient = ->
 		_client.connect = connect

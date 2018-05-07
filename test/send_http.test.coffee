@@ -6,6 +6,7 @@
 
 # After running the first test, restart the broker before testing again
 
+async      = require "async"
 test       = require 'tape'
 devicemqtt = require '../src/index'
 { fork }   = require "child_process"
@@ -58,25 +59,26 @@ test.only 'Sends action over http', (assert) ->
 		dest: 'receiver1'
 
 	# Setting up clients
-	sender = setup 'sender1'
-	receiver = forkClient 'receiver1'
+	sender   = setup 'sender1'
+	receiver = setup 'receiver1'
 
 	receiver.on 'message', (message) ->
 		if message is 'connected'
 			sender.connect()
 
 	sender.once 'connected', (socket) ->
-		socket.sendHTTP(
-			actionToSend
+		socket.sendHTTP actionToSend
 		, (error, response) ->
-				assert.deepEqual response, expectedResponse,
-					"The response should be equal to #{JSON.stringify expectedResponse}"
-				teardownForkedClient receiver
-				teardown sender
-				assert.end()
+			console.log "error", error
+			console.log "response", response
+			assert.deepEqual response, expectedResponse,
+				"The response should be equal to #{JSON.stringify expectedResponse}"
+			async.parallel [
+				(cb) ->
+					teardown receiver, cb
+				(cb) ->
+					teardown sender, cb
+			], -> assert.end
 		, (error, ack) ->
-				assert.equal ack, 'OK',
-					'If the sender published an action correctly, the ack should be `OK`'
-		)
-
-
+			assert.equal ack, 'OK',
+				'If the sender published an action correctly, the ack should be `OK`'

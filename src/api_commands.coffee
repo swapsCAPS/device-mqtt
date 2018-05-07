@@ -27,14 +27,20 @@ module.exports = ({ mqttInstance, socket, socketId }) ->
 			return unless topic is "#{dest}/ip"
 			_mqtt.unsubscribe "#{dest}/ip", (error) ->
 				console.log "unsubscribe", error
+
 			console.log "ipInfo", ipInfo.toString()
+
 			{ips, port} = JSON.parse ipInfo.toString()
 
 			# Make request to device
-			request.post "http://#{ips.tun0IP}:#{port}", (error, response, body) ->
-				console.log "error", error
-				console.log "response", response
-				console.log "body", body
+			request.post "http://#{ips.tun0IP}:#{port}",
+				body:
+					action: action
+					payload: payload
+				json: true
+			(error, response, body) ->
+				console.log "res error", error
+				console.log "res body", body
 
 
 		_mqtt.subscribe "#{dest}/ip", { qos: 0 }, (error, granted) ->
